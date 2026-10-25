@@ -1,8 +1,22 @@
-from typing import Any
-from jaxtyping import Float, Int, Bool
+"""
+Adapter module — glue layer between learner implementations (in therapml/)
+and the automated test suite.
 
+Learners implement all logic inside ``therapml/`` and only fill in these
+thin wrapper functions so the tests can call them in a uniform way.
+"""
+
+from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
+from jaxtyping import Float
 from torch import Tensor
 
+
+# ============================================================================
+# Pre-phase: Tensor Operations (kept from original repo)
+# ============================================================================
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
     raise NotImplementedError
@@ -12,11 +26,150 @@ def run_tensor_dot(arr1: Float[list, "..."], arr2: Float[list, "..."], dim: int)
     raise NotImplementedError
 
 
-def get_sgd_cls() -> Any:
+# ============================================================================
+# Phase 1 — Part 1: Mathematical Foundations  (Week 1, NumPy-only)
+# ============================================================================
+
+# --- Task 1: PCA -----------------------------------------------------------
+
+def run_pca(data: NDArray, k: int) -> dict:
+    """Run PCA on *data* (n_samples, n_features) and project to *k* components.
+
+    Must return a dict with keys:
+        ``projected``     – (n_samples, k) projected data
+        ``components``    – (k, n_features) principal component row-vectors
+        ``eigenvalues``   – (k,) top-k eigenvalues in descending order
+        ``mean``          – (n_features,) per-feature mean used for centering
+        ``reconstructed`` – (n_samples, n_features) reconstruction from k components
+    """
     raise NotImplementedError
 
 
-def get_adam_cls() -> Any:
+# --- Task 2: SVD & Low-Rank Approximation ----------------------------------
+
+def run_truncated_svd(matrix: NDArray, rank: int) -> dict:
+    """Truncated SVD of *matrix* (m, n) at the given *rank*.
+
+    Must return a dict with keys:
+        ``U``             – (m, rank)
+        ``S``             – (rank,)
+        ``Vt``            – (rank, n)
+        ``reconstructed`` – (m, n) low-rank reconstruction U @ diag(S) @ Vt
+    """
+    raise NotImplementedError
+
+
+# --- Task 4: Maximum Likelihood Estimation ----------------------------------
+
+def run_mle_gaussian(data: NDArray, lr: float = 0.01, n_steps: int = 5000) -> dict:
+    """Fit a 1-D Gaussian to *data* via gradient-descent MLE.
+
+    Must return a dict with keys:
+        ``mu``    – estimated mean  (float)
+        ``sigma2``– estimated variance  (float)
+    """
+    raise NotImplementedError
+
+
+# --- Task 6: Information Theory Toolkit -------------------------------------
+
+def run_entropy(P: NDArray) -> float:
+    """Shannon entropy H(P) in *bits* (log base 2)."""
+    raise NotImplementedError
+
+
+def run_kl_divergence(P: NDArray, Q: NDArray) -> float:
+    """KL divergence D_KL(P || Q) in *bits*."""
+    raise NotImplementedError
+
+
+def run_cross_entropy_info(P: NDArray, Q: NDArray) -> float:
+    """Cross-entropy H(P, Q) in *bits*.
+
+    Named ``_info`` to avoid collision with the PyTorch loss adapter.
+    """
+    raise NotImplementedError
+
+
+def run_mutual_information(joint: NDArray) -> float:
+    """Mutual information I(X; Y) from a 2-D joint distribution table, in *bits*."""
+    raise NotImplementedError
+
+
+# --- Task 7: Numerical Stability -------------------------------------------
+
+def run_log_sum_exp(x: NDArray) -> float:
+    """Numerically stable log-sum-exp: log(sum(exp(x)))."""
+    raise NotImplementedError
+
+
+# --- Task 8: Optimizers (pure NumPy, linear regression) ---------------------
+
+def run_numpy_sgd_fit(
+    X: NDArray, y: NDArray, lr: float, n_steps: int,
+) -> dict:
+    """Vanilla SGD on linear regression.
+
+    Returns ``{'weights': NDArray, 'loss_history': list[float]}``.
+    """
+    raise NotImplementedError
+
+
+def run_numpy_sgd_momentum_fit(
+    X: NDArray, y: NDArray, lr: float, momentum: float, n_steps: int,
+) -> dict:
+    """SGD + momentum on linear regression.
+
+    Returns ``{'weights': NDArray, 'loss_history': list[float]}``.
+    """
+    raise NotImplementedError
+
+
+def run_numpy_adam_fit(
+    X: NDArray, y: NDArray, lr: float, n_steps: int,
+) -> dict:
+    """Adam on linear regression.
+
+    Returns ``{'weights': NDArray, 'loss_history': list[float]}``.
+    """
+    raise NotImplementedError
+
+
+# ============================================================================
+# Phase 1 — Part 2: The PyTorch Toolbox  (Week 2)
+# ============================================================================
+
+# --- Task 1: Autograd Intuition --------------------------------------------
+
+def get_value_class() -> Any:
+    """Return the learner's ``Value`` class (scalar autograd engine)."""
+    raise NotImplementedError
+
+
+# --- Task 2: Linear Layers & Initialization --------------------------------
+
+def run_linear(
+    d_in: int,
+    d_out: int,
+    weights: Float[Tensor, "d_out d_in"],
+    in_features: Float[Tensor, "... d_in"],
+) -> Float[Tensor, "... d_out"]:
+    raise NotImplementedError
+
+
+def run_kaiming_init(fan_in: int, fan_out: int) -> Float[Tensor, "fan_out fan_in"]:
+    """Return a weight matrix initialized with Kaiming He Normal."""
+    raise NotImplementedError
+
+
+def run_xavier_init(fan_in: int, fan_out: int) -> Float[Tensor, "fan_out fan_in"]:
+    """Return a weight matrix initialized with Xavier Glorot."""
+    raise NotImplementedError
+
+
+# --- Task 3: Activations ---------------------------------------------------
+
+def run_sigmoid(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
     raise NotImplementedError
 
 
@@ -32,15 +185,6 @@ def run_softmax(in_features: Float[Tensor, "..."], dim: int) -> Float[Tensor, ".
     raise NotImplementedError
 
 
-def run_linear(
-    d_in: int,
-    d_out: int,
-    weights: Float[Tensor, "d_out d_in"],
-    in_features: Float[Tensor, "... d_in"],
-) -> Float[Tensor, "... d_out"]:
-    raise NotImplementedError
-
-
 def run_swiglu(
     d_model: int,
     d_ff: int,
@@ -52,227 +196,73 @@ def run_swiglu(
     raise NotImplementedError
 
 
+# --- Task 4: Loss Functions ------------------------------------------------
+
 def run_cross_entropy_loss(
-    logits: Float[Tensor, "batch output_dim"], ground_truth: Float[Tensor, "batch output_dim"]
+    logits: Float[Tensor, "batch output_dim"],
+    ground_truth: Float[Tensor, "batch output_dim"],
 ) -> Float[Tensor, ""]:
     raise NotImplementedError
 
+
+def run_kl_divergence_loss(
+    input_log_probs: Float[Tensor, "batch d"],
+    target_probs: Float[Tensor, "batch d"],
+) -> Float[Tensor, ""]:
+    """KL-divergence loss.  *input_log_probs* are **log-probabilities**,
+    *target_probs* are **probabilities**."""
+    raise NotImplementedError
+
+
+# --- Task 5: Optimizers (PyTorch-compatible) --------------------------------
+
+def get_sgd_cls() -> Any:
+    """Return the learner's SGD optimizer class (with momentum support)."""
+    raise NotImplementedError
+
+
+def get_adam_cls() -> Any:
+    """Return the learner's AdamW optimizer class."""
+    raise NotImplementedError
+
+
+# --- Task 6: Regularization ------------------------------------------------
 
 def run_dropout(input: Float[Tensor, "..."], prob: float) -> Float[Tensor, "..."]:
     raise NotImplementedError
 
 
+# --- Task 7: Normalization & Residuals --------------------------------------
+
 def run_layernorm(
-    input: Float[Tensor, "batch ..."], gamma: Float[Tensor, "batch ..."], beta: Float[Tensor, "batch ..."]
+    input: Float[Tensor, "batch ..."],
+    gamma: Float[Tensor, "batch ..."],
+    beta: Float[Tensor, "batch ..."],
 ) -> Float[Tensor, "batch ..."]:
     raise NotImplementedError
 
 
-def run_rmsnorm(input: Float[Tensor, "batch ..."], gamma: Float[Tensor, "batch ..."]) -> Float[Tensor, "batch ..."]:
+def run_rmsnorm(
+    input: Float[Tensor, "batch ..."],
+    gamma: Float[Tensor, "batch ..."],
+) -> Float[Tensor, "batch ..."]:
     raise NotImplementedError
 
 
-def run_rope(
-    embedding_dim: int,
-    theta: float,
-    context_len: int,
-    input_embeddings: Float[Tensor, "batch ctx_len embedding_dim"],
-    token_positions: Int[Tensor, "batch ctx_len"],
-) -> Float[Tensor, "batch ctx_len embedding_dim"]:
-    raise NotImplementedError
+# --- Task 8: MNIST Integration Test -----------------------------------------
 
-
-def run_self_attention(
-    Q: Float[Tensor, "... queries d_k"],
-    K: Float[Tensor, "... batch keys d_k"],
-    V: Float[Tensor, "... batch values d_v"],
-    mask: Bool[Tensor, "... batch queries keys"] | None = None,
-) -> Float[Tensor, "... batch queries d_v"]:
-    """
-    Note the number of dimensions here can be greater than 3
+def get_custom_mnist_model() -> Any:
+    """Return an *untrained* nn.Module built entirely from custom components
+    (MyLinear, MyReLU, MyDropout, MyLayerNorm).
     """
     raise NotImplementedError
 
 
-def run_multihead_self_attention(
-    d_model: int,
-    num_heads: int,
-    q_proj_weight: Float[Tensor, "d_k d_in"],
-    k_proj_weight: Float[Tensor, "d_k d_in"],
-    v_proj_weight: Float[Tensor, "d_v d_in"],
-    o_proj_weight: Float[Tensor, "d_model d_v"],
-    in_features: Float[Tensor, "batch ctx_len d_in"],
-) -> Float[Tensor, "batch ctx_len d_out"]:
+def get_custom_loss_fn() -> Any:
+    """Return the learner's MyCrossEntropyLoss callable."""
     raise NotImplementedError
 
 
-def run_multihead_self_attention_with_rope(
-    d_model: int,
-    num_heads: int,
-    ctx_len: int,
-    theta: float,
-    q_proj_weight: Float[Tensor, "d_k d_in"],
-    k_proj_weight: Float[Tensor, "d_k d_in"],
-    v_proj_weight: Float[Tensor, "d_v d_in"],
-    o_proj_weight: Float[Tensor, "d_model d_v"],
-    in_features: Float[Tensor, "batch ctx_len d_in"],
-    token_positions: Int[Tensor, "batch ctx_len"],
-) -> Float[Tensor, "batch ctx_len d_out"]:
-    raise NotImplementedError
-
-
-def run_transformer_block(
-    d_model: int,
-    num_heads: int,
-    d_ff: int,
-    ctx_len: int,
-    theta: float,
-    weights: dict[str, Tensor],
-    in_features: Float[Tensor, " batch sequence_length d_model"],
-) -> Float[Tensor, " batch sequence_length d_model"]:
-    """
-    Note this function should use RoPE.
-
-    Args:
-        d_model (int): The dimensionality of the Transformer block input.
-
-        num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
-            evenly divisible by `num_heads`.
-
-        d_ff (int): Dimensionality of the feed-forward inner layer.
-
-        ctx_len (int): Maximum sequence length of the input_tensor.
-
-        theta (float): RoPE parameter.
-
-        weights (dict[str, Tensor]):
-            The keys of this dictionary are:
-            - `attn.q_proj.weight`
-                The query projections for all `num_heads` attention heads.
-                Shape is (d_model, d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.q_proj.weight == torch.cat([q_heads.0.weight, ..., q_heads.N.weight], dim=0)`.
-            - `attn.k_proj.weight`
-                The key projections for all `num_heads` attention heads.
-                Shape is (d_model, d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.k_proj.weight == torch.cat([k_heads.0.weight, ..., k_heads.N.weight], dim=0)`.
-            - `attn.v_proj.weight`
-                The value projections for all `num_heads` attention heads.
-                Shape is (d_model, d_model).
-                The rows are ordered by matrices of shape (num_heads, d_v),
-                so `attn.v_proj.weight == torch.cat([v_heads.0.weight, ..., v_heads.N.weight], dim=0)`.
-            - `attn.output_proj.weight`
-                Weight of the multi-head self-attention output projection
-                Shape is (d_model, d_model).
-            - `ln1.weight`
-                Weights of affine transform for the first RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-            - `ffn.w1.weight`
-                Weight of the first linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `ffn.w2.weight`
-                Weight of the second linear transformation in the FFN.
-                Shape is (d_ff, d_model).
-            - `ffn.w3.weight`
-                Weight of the third linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `ln2.weight`
-                Weights of affine transform for the second RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-
-        in_features (Float[Tensor, "batch sequence_length d_model"]):
-            Tensor to run your implementation on.
-
-    Returns:
-        Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
-        running the Transformer block on the input features while using RoPE.
-    """
-    raise NotImplementedError
-
-
-def run_transformer_lm(
-    vocab_size: int,
-    context_length: int,
-    d_model: int,
-    num_layers: int,
-    num_heads: int,
-    d_ff: int,
-    rope_theta: float,
-    weights: dict[str, Tensor],
-    in_indices: Int[Tensor, " batch_size sequence_length"],
-) -> Float[Tensor, " batch_size sequence_length vocab_size"]:
-    """
-    Similar to before it uses RoPE
-    Args:
-        vocab_size (int): The number of unique items in the output vocabulary to be predicted.
-
-        context_length (int): The maximum number of tokens to process at once.
-
-        d_model (int): The dimensionality of the model embeddings and sublayer outputs.
-
-        num_layers (int): The number of Transformer layers to use.
-
-        num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
-            evenly divisible by `num_heads`.
-
-        d_ff (int): Dimensionality of the feed-forward inner layer (See Vaswani et al).
-
-        rope_theta (float): The RoPE `theta` parameter.
-
-        weights (dict[str, Tensor]):
-            {num_layers} refers to an integer between `0` and `num_layers - 1` (the layer index).
-            The keys of this dictionary are:
-            - `token_embeddings.weight`
-                Token embedding matrix. Shape is (vocab_size, d_model).
-            - `layers.{num_layers}.attn.q_proj.weight`
-                The query projections for all `num_heads` attention heads.
-                Shape is (num_heads * (d_model / num_heads), d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.q_proj.weight == torch.cat([q_heads.0.weight, ..., q_heads.N.weight], dim=0)`.
-            - `layers.{num_layers}.attn.k_proj.weight`
-                The key projections for all `num_heads` attention heads.
-                Shape is (num_heads * (d_model / num_heads), d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.k_proj.weight == torch.cat([k_heads.0.weight, ..., k_heads.N.weight], dim=0)`.
-            - `layers.{num_layers}.attn.v_proj.weight`
-                The value projections for all `num_heads` attention heads.
-                Shape is (num_heads * (d_model / num_heads), d_model).
-                The rows are ordered by matrices of shape (num_heads, d_v),
-                so `attn.v_proj.weight == torch.cat([v_heads.0.weight, ..., v_heads.N.weight], dim=0)`.
-            - `layers.{num_layers}.attn.output_proj.weight`
-                Weight of the multi-head self-attention output projection
-                Shape is ((d_model / num_heads) * num_heads, d_model).
-            - `layers.{num_layers}.ln1.weight`
-                Weights of affine transform for the first RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-            - `layers.{num_layers}.ffn.w1.weight`
-                Weight of the first linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `layers.{num_layers}.ffn.w2.weight`
-                Weight of the second linear transformation in the FFN.
-                Shape is (d_ff, d_model).
-            - `layers.{num_layers}.ffn.w3.weight`
-                Weight of the third linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `layers.{num_layers}.ln2.weight`
-                Weights of affine transform for the second RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-            - `ln_final.weight`
-                Weights of affine transform for RMSNorm applied to the output of the final transformer block.
-                Shape is (d_model, ).
-            - `lm_head.weight`
-                Weights of the language model output embedding.
-                Shape is (vocab_size, d_model).
-        in_indices (Int[Tensor, "batch_size sequence_length"]) Tensor with input indices to run the language model on. Shape is (batch_size, sequence_length), where
-            `sequence_length` is at most `context_length`.
-
-    Returns:
-        Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
-        next-word distribution for each token.
-    """
+def get_custom_optimizer(params, lr: float = 1e-3) -> Any:
+    """Return the learner's MyAdamW optimizer wrapping *params*."""
     raise NotImplementedError
