@@ -75,7 +75,7 @@ class TestKLDivergence:
     def test_asymmetry(self):
         """KL is not symmetric: KL(P||Q) != KL(Q||P) in general."""
         P = np.array([0.9, 0.1])
-        Q = np.array([0.1, 0.9])
+        Q = np.array([0.5, 0.5])
         assert abs(run_kl_divergence(P, Q) - run_kl_divergence(Q, P)) > 0.01
 
 
