@@ -12,6 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 from jaxtyping import Float
 from torch import Tensor
+from therapml.pca import pca
 
 
 # ============================================================================
@@ -42,7 +43,7 @@ def run_pca(data: NDArray, k: int) -> dict:
         ``mean``          – (n_features,) per-feature mean used for centering
         ``reconstructed`` – (n_samples, n_features) reconstruction from k components
     """
-    raise NotImplementedError
+    return pca(data,k)
 
 
 # --- Task 2: SVD & Low-Rank Approximation ----------------------------------
