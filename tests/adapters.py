@@ -14,6 +14,7 @@ from jaxtyping import Float
 from torch import Tensor
 from therapml.pca import pca
 from therapml.svd import truncated_svd
+from therapml.mle_gaussian import grad_des_mle
 
 
 # ============================================================================
@@ -70,7 +71,7 @@ def run_mle_gaussian(data: NDArray, lr: float = 0.01, n_steps: int = 5000) -> di
         ``mu``    – estimated mean  (float)
         ``sigma2``– estimated variance  (float)
     """
-    raise NotImplementedError
+    return grad_des_mle(data, lr, n_steps)
 
 
 # --- Task 6: Information Theory Toolkit -------------------------------------
