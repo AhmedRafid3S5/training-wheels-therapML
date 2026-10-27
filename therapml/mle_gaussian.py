@@ -1,5 +1,6 @@
 from typing import Any, Dict
 import numpy as np
+import math
 
 def grad_des_mle(data, lr, steps):
     """Fit a 1-D Gaussian to *data* via gradient-descent MLE."""
@@ -28,3 +29,34 @@ def grad_des_mle(data, lr, steps):
         "mu" : mu,
         "sigma2" : (sig**2)
     }
+
+def compare_closed_form(lr, steps, mu, sig, N):
+
+    #generate mock gaussian data 
+    data = np.random.normal(loc=mu, scale=sig, size=N)
+
+    #closed form solution
+    true_mu = np.mean(data)
+    true_sig = np.std(data)
+
+    #solutions via grad descent
+    sol = grad_des_mle(data, lr, steps)
+    aprox_mu = sol["mu"]
+    aprox_sig = math.sqrt(sol["sigma2"])
+
+    print(f"Approximate mu: {aprox_mu:.4f}, Approximate sig: {aprox_sig:.4f}")
+    print(f"Closed form mu: {true_mu:.4f}, Closed form sig: {true_sig:.4f}")
+    print(f"mu error: {abs(aprox_mu - true_mu):.4f}, sig error: {abs(aprox_sig - true_sig):.4f}")
+
+
+if __name__ == "__main__":
+    #hyperparams
+    lr = 0.01
+    steps = 50
+
+    #true params
+    mu = 5.0
+    sig = 2.0
+    N = 10000
+
+    compare_closed_form(lr, steps, mu, sig, N)
