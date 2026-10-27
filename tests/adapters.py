@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 from jaxtyping import Float
 from torch import Tensor
 from therapml.pca import pca
+from therapml.svd import truncated_svd
 
 
 # ============================================================================
@@ -57,7 +58,7 @@ def run_truncated_svd(matrix: NDArray, rank: int) -> dict:
         ``Vt``            – (rank, n)
         ``reconstructed`` – (m, n) low-rank reconstruction U @ diag(S) @ Vt
     """
-    raise NotImplementedError
+    return truncated_svd(matrix,rank)
 
 
 # --- Task 4: Maximum Likelihood Estimation ----------------------------------
