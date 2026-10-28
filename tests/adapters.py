@@ -15,6 +15,7 @@ from torch import Tensor
 from therapml.pca import pca
 from therapml.svd import truncated_svd
 from therapml.mle_gaussian import grad_des_mle
+from therapml.logsumexp import logsumexp
 from therapml.information import Entropy
 
 
@@ -104,7 +105,7 @@ def run_mutual_information(joint: NDArray) -> float:
 
 def run_log_sum_exp(x: NDArray) -> float:
     """Numerically stable log-sum-exp: log(sum(exp(x)))."""
-    raise NotImplementedError
+    return logsumexp(x)
 
 
 # --- Task 8: Optimizers (pure NumPy, linear regression) ---------------------
