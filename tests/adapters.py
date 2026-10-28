@@ -15,6 +15,7 @@ from torch import Tensor
 from therapml.pca import pca
 from therapml.svd import truncated_svd
 from therapml.mle_gaussian import grad_des_mle
+from therapml.information import Entropy
 
 
 # ============================================================================
@@ -78,12 +79,12 @@ def run_mle_gaussian(data: NDArray, lr: float = 0.01, n_steps: int = 5000) -> di
 
 def run_entropy(P: NDArray) -> float:
     """Shannon entropy H(P) in *bits* (log base 2)."""
-    raise NotImplementedError
+    return Entropy.shanonEntropy(P)
 
 
 def run_kl_divergence(P: NDArray, Q: NDArray) -> float:
     """KL divergence D_KL(P || Q) in *bits*."""
-    raise NotImplementedError
+    return Entropy.klDivergence(P,Q)
 
 
 def run_cross_entropy_info(P: NDArray, Q: NDArray) -> float:
@@ -91,12 +92,12 @@ def run_cross_entropy_info(P: NDArray, Q: NDArray) -> float:
 
     Named ``_info`` to avoid collision with the PyTorch loss adapter.
     """
-    raise NotImplementedError
+    return Entropy.cross_entropy(P,Q)
 
 
 def run_mutual_information(joint: NDArray) -> float:
     """Mutual information I(X; Y) from a 2-D joint distribution table, in *bits*."""
-    raise NotImplementedError
+    return Entropy.mutual_information(joint)
 
 
 # --- Task 7: Numerical Stability -------------------------------------------
