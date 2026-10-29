@@ -17,6 +17,7 @@ from therapml.svd import truncated_svd
 from therapml.mle_gaussian import grad_des_mle
 from therapml.logsumexp import logsumexp
 from therapml.information import Entropy
+from therapml.optimizers import Optimizers
 
 
 # ============================================================================
@@ -117,7 +118,7 @@ def run_numpy_sgd_fit(
 
     Returns ``{'weights': NDArray, 'loss_history': list[float]}``.
     """
-    raise NotImplementedError
+    return Optimizers.sgd(X,y,lr,n_steps)
 
 
 def run_numpy_sgd_momentum_fit(
@@ -127,7 +128,7 @@ def run_numpy_sgd_momentum_fit(
 
     Returns ``{'weights': NDArray, 'loss_history': list[float]}``.
     """
-    raise NotImplementedError
+    return Optimizers.sgd_momentum(X,y,lr,momentum,n_steps)
 
 
 def run_numpy_adam_fit(
@@ -137,7 +138,7 @@ def run_numpy_adam_fit(
 
     Returns ``{'weights': NDArray, 'loss_history': list[float]}``.
     """
-    raise NotImplementedError
+    return Optimizers.sgd_adam_fit(X,y,lr,n_steps)
 
 
 # ============================================================================
