@@ -9,7 +9,9 @@ dependencies = [
     "jaxtyping>=0.3.7",
     "matplotlib>=3.11.2",
     "numpy>=2.4.2",
+    "pandas>=3.1.0",
     "pytest>=9.0.2",
+    "scikit-learn>=1.9.1",
     "torch>=2.10.0",
     "tqdm>=4.67.3",
 ]
