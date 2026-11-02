@@ -19,6 +19,7 @@ from therapml.logsumexp import logsumexp
 from therapml.information import Entropy
 from therapml.optimizers import Optimizers
 from therapml.autograd import Value
+from therapml.activations import Activation
 
 
 # ============================================================================
@@ -181,7 +182,7 @@ def run_sigmoid(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
 
 
 def run_relu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    return Activation.myReLU(in_features)
 
 
 def run_gelu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
@@ -189,7 +190,7 @@ def run_gelu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
 
 
 def run_softmax(in_features: Float[Tensor, "..."], dim: int) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    return Activation.mySoftmax(in_features,dim)
 
 
 def run_swiglu(
