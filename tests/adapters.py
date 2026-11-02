@@ -18,6 +18,7 @@ from therapml.mle_gaussian import grad_des_mle
 from therapml.logsumexp import logsumexp
 from therapml.information import Entropy
 from therapml.optimizers import Optimizers
+from therapml.autograd import Value
 
 
 # ============================================================================
@@ -149,7 +150,7 @@ def run_numpy_adam_fit(
 
 def get_value_class() -> Any:
     """Return the learner's ``Value`` class (scalar autograd engine)."""
-    raise NotImplementedError
+    return Value
 
 
 # --- Task 2: Linear Layers & Initialization --------------------------------
