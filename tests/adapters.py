@@ -178,7 +178,7 @@ def run_xavier_init(fan_in: int, fan_out: int) -> Float[Tensor, "fan_out fan_in"
 # --- Task 3: Activations ---------------------------------------------------
 
 def run_sigmoid(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    return Activation.mySigmoid(in_features)
 
 
 def run_relu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
@@ -186,7 +186,7 @@ def run_relu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
 
 
 def run_gelu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    return Activation.myGELU(in_features)
 
 
 def run_softmax(in_features: Float[Tensor, "..."], dim: int) -> Float[Tensor, "..."]:
@@ -201,7 +201,7 @@ def run_swiglu(
     w3_weight: Float[Tensor, " d_ff d_model"],
     in_features: Float[Tensor, " ... d_model"],
 ) -> Float[Tensor, " ... d_model"]:
-    raise NotImplementedError
+    return Activation.mySwiGLU(d_model, d_ff, w1_weight, w2_weight, w3_weight, in_features)
 
 
 # --- Task 4: Loss Functions ------------------------------------------------
