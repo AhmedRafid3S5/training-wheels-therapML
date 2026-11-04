@@ -22,6 +22,7 @@ from therapml.optimizers import Optimizers
 from therapml.autograd import Value
 from therapml.activations import Activation
 from therapml.linear import MyLinear
+from therapml.loss import Loss
 
 
 # ============================================================================
@@ -218,7 +219,7 @@ def run_cross_entropy_loss(
     logits: Float[Tensor, "batch output_dim"],
     ground_truth: Float[Tensor, "batch output_dim"],
 ) -> Float[Tensor, ""]:
-    raise NotImplementedError
+    return Loss._crossentropyloss(logits,ground_truth)
 
 
 def run_kl_divergence_loss(
