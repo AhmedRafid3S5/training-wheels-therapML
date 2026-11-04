@@ -9,6 +9,7 @@ thin wrapper functions so the tests can call them in a uniform way.
 from typing import Any
 
 import numpy as np
+import torch
 from numpy.typing import NDArray
 from jaxtyping import Float
 from torch import Tensor
@@ -20,6 +21,7 @@ from therapml.information import Entropy
 from therapml.optimizers import Optimizers
 from therapml.autograd import Value
 from therapml.activations import Activation
+from therapml.linear import MyLinear
 
 
 # ============================================================================
@@ -161,18 +163,24 @@ def run_linear(
     d_out: int,
     weights: Float[Tensor, "d_out d_in"],
     in_features: Float[Tensor, "... d_in"],
-) -> Float[Tensor, "... d_out"]:
-    raise NotImplementedError
+) :
+    layer = MyLinear(d_in,d_out, bias =True)
+    with torch.no_grad():
+        layer.weight.copy_(weights)
+        layer.bias.fill_(0.0)
+
+    return layer(in_features) #executes a forward pass via nn internal __call__ method
+    
 
 
 def run_kaiming_init(fan_in: int, fan_out: int) -> Float[Tensor, "fan_out fan_in"]:
     """Return a weight matrix initialized with Kaiming He Normal."""
-    raise NotImplementedError
+    return MyLinear.runKaiming(fan_in,fan_out)
 
 
 def run_xavier_init(fan_in: int, fan_out: int) -> Float[Tensor, "fan_out fan_in"]:
     """Return a weight matrix initialized with Xavier Glorot."""
-    raise NotImplementedError
+    return MyLinear.runXavier(fan_in, fan_out)
 
 
 # --- Task 3: Activations ---------------------------------------------------
