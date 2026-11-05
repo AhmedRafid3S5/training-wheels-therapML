@@ -228,7 +228,7 @@ def run_kl_divergence_loss(
 ) -> Float[Tensor, ""]:
     """KL-divergence loss.  *input_log_probs* are **log-probabilities**,
     *target_probs* are **probabilities**."""
-    raise NotImplementedError
+    return Loss.kldivergenceloss(input_log_probs, target_probs)
 
 
 # --- Task 5: Optimizers (PyTorch-compatible) --------------------------------

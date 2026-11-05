@@ -19,3 +19,12 @@ class Loss:
 
         sample_losses = -torch.sum(ground_truth*log_probs, dim=-1)
         return torch.mean(sample_losses)
+
+    @staticmethod
+    def kldivergenceloss( input_log_probs,target_probs):
+        P = target_probs
+        logQ = input_log_probs
+        mask = P > 0.0
+        kl_elementwise = torch.zeros_like(P)
+        kl_elementwise[mask] = P[mask]*(torch.log(P[mask]) - logQ[mask])
+        return torch.sum(kl_elementwise) / P.shape[0] # returns avg loss across D dimensions for each sample N
