@@ -23,6 +23,7 @@ from therapml.autograd import Value
 from therapml.activations import Activation
 from therapml.linear import MyLinear
 from therapml.loss import Loss
+from therapml.adamw import MyAdam
 
 
 # ============================================================================
@@ -240,7 +241,7 @@ def get_sgd_cls() -> Any:
 
 def get_adam_cls() -> Any:
     """Return the learner's AdamW optimizer class."""
-    raise NotImplementedError
+    return MyAdam
 
 
 # --- Task 6: Regularization ------------------------------------------------
