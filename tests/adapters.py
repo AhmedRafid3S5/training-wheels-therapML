@@ -17,6 +17,7 @@ from therapml.pca import pca
 from therapml.svd import truncated_svd
 from therapml.mle_gaussian import grad_des_mle
 from therapml.logsumexp import logsumexp
+from therapml.dropout import inverted_dropout
 from therapml.information import Entropy
 from therapml.optimizers import Optimizers
 from therapml.autograd import Value
@@ -24,6 +25,7 @@ from therapml.activations import Activation
 from therapml.linear import MyLinear
 from therapml.loss import Loss
 from therapml.adamw import MyAdam
+from therapml.tensor_sgd import MySGD
 
 
 # ============================================================================
@@ -236,7 +238,7 @@ def run_kl_divergence_loss(
 
 def get_sgd_cls() -> Any:
     """Return the learner's SGD optimizer class (with momentum support)."""
-    raise NotImplementedError
+    return MySGD
 
 
 def get_adam_cls() -> Any:
@@ -247,7 +249,7 @@ def get_adam_cls() -> Any:
 # --- Task 6: Regularization ------------------------------------------------
 
 def run_dropout(input: Float[Tensor, "..."], prob: float) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    return inverted_dropout(input, prob)
 
 
 # --- Task 7: Normalization & Residuals --------------------------------------
