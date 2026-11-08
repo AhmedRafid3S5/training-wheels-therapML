@@ -18,6 +18,7 @@ from therapml.svd import truncated_svd
 from therapml.mle_gaussian import grad_des_mle
 from therapml.logsumexp import logsumexp
 from therapml.dropout import inverted_dropout
+from therapml.norm import myLayerNorm, myRMSnorm
 from therapml.information import Entropy
 from therapml.optimizers import Optimizers
 from therapml.autograd import Value
@@ -259,14 +260,14 @@ def run_layernorm(
     gamma: Float[Tensor, "batch ..."],
     beta: Float[Tensor, "batch ..."],
 ) -> Float[Tensor, "batch ..."]:
-    raise NotImplementedError
+    return myLayerNorm(input, gamma, beta)
 
 
 def run_rmsnorm(
     input: Float[Tensor, "batch ..."],
     gamma: Float[Tensor, "batch ..."],
 ) -> Float[Tensor, "batch ..."]:
-    raise NotImplementedError
+    return myRMSnorm(input, gamma)
 
 
 # --- Task 8: MNIST Integration Test -----------------------------------------
