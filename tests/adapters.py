@@ -27,7 +27,8 @@ from therapml.linear import MyLinear
 from therapml.loss import Loss
 from therapml.adamw import MyAdam
 from therapml.tensor_sgd import MySGD
-
+from therapml.custom_mlp import CustomMLP, MyCrossEntropyLoss
+from therapml.adamw import MyAdam
 
 # ============================================================================
 # Pre-phase: Tensor Operations (kept from original repo)
@@ -276,14 +277,14 @@ def get_custom_mnist_model() -> Any:
     """Return an *untrained* nn.Module built entirely from custom components
     (MyLinear, MyReLU, MyDropout, MyLayerNorm).
     """
-    raise NotImplementedError
+    return CustomMLP()
 
 
 def get_custom_loss_fn() -> Any:
     """Return the learner's MyCrossEntropyLoss callable."""
-    raise NotImplementedError
+    return MyCrossEntropyLoss()
 
 
 def get_custom_optimizer(params, lr: float = 1e-3) -> Any:
     """Return the learner's MyAdamW optimizer wrapping *params*."""
-    raise NotImplementedError
+    return MyAdam(params, lr=lr)
