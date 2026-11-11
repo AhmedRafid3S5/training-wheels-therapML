@@ -408,7 +408,13 @@ def run_multihead_self_attention(
     where each ``W_q_head_i`` has shape ``(d_model // num_heads, d_model)``.
     All heads must be computed in parallel (no Python loop over heads).
     """
-    raise NotImplementedError
+    return multihead_attention(q_proj_weight,
+                               k_proj_weight,
+                               v_proj_weight,
+                               o_proj_weight,
+                               in_features,
+                               d_model,
+                               num_heads)
 
 
 # --- Task 7: Grouped Query Attention ----------------------------------------

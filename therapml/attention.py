@@ -38,3 +38,37 @@ def causal_attention(Wq,Wk,Wv,in_features):
     mask = torch.ones(seq_len,seq_len, device=in_features.device).tril() > 0
 
     return scaled_attention(Q,K,V,mask)
+
+def multihead_attention(Wq,Wk,Wv,Wo,in_features,d_model,num_heads):
+
+    head_dim = d_model // num_heads
+    seq_len = in_features.size(-2)
+
+    #compute Q,K,V using the input and learned weights
+    Q = F.linear(in_features, Wq)
+    K = F.linear(in_features, Wk)
+    V = F.linear(in_features, Wv)
+
+    #change tensor orientation
+    #1st arg = -1 means last dim is the target which is d_model
+    #2nd arg = (num_heads, head_dim) is a tuple defining the new dimensions that will replace whatever is in -1
+
+    Q = Q.unflatten(-1, (num_heads,head_dim)).transpose(-2,-3)
+    K = K.unflatten(-1, (num_heads,head_dim)).transpose(-2,-3)
+    V = V.unflatten(-1, (num_heads,head_dim)).transpose(-2,-3)
+
+    scores = torch.matmul(Q, K.transpose(-2,-1)) / math.sqrt(head_dim)
+    mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=in_features.device).tril()
+    scores = scores.masked_fill(~mask, float('-inf'))
+
+    #calculate attention
+    attn = torch.softmax(scores, dim=-1) # dim=-1 applies softmax across the columns of the matrix
+    out  = torch.matmul(attn, V)
+
+    #recombine heads
+    out = out.transpose(-2,-3).contiguous()
+    out = out.flatten(-2,-1)
+
+    output_proj = F.linear(out, Wo)
+
+    return output_proj
