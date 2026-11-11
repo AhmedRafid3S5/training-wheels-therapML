@@ -31,6 +31,7 @@ from therapml.tensor_sgd import MySGD
 from therapml.custom_mlp import CustomMLP, MyCrossEntropyLoss
 from therapml.adamw import MyAdam
 from therapml.tokenizer import BasicTokenizer
+from therapml.attention import *
 
 # ============================================================================
 # Pre-phase: Tensor Operations (kept from original repo)
@@ -372,7 +373,7 @@ def run_scaled_dot_product_attention(
     set to −∞ before the softmax. Any number of leading batch/head dimensions
     must be supported.
     """
-    raise NotImplementedError
+    return scaled_attention(Q,K,V,mask)
 
 
 # --- Task 5: Causal Self-Attention (single head) ----------------------------
@@ -386,7 +387,7 @@ def run_causal_self_attention(
     """Single-head causal self-attention with Q, K, V projections (no bias,
     no output projection). Token *i* may only attend to tokens ``0..i``.
     """
-    raise NotImplementedError
+    return causal_attention(q_proj_weight,k_proj_weight,v_proj_weight,in_features)
 
 
 # --- Task 6: Multi-Head Attention -------------------------------------------
