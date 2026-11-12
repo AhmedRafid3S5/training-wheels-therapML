@@ -82,3 +82,59 @@ def multihead_attention(Wq,Wk,Wv,Wo,in_features,d_model,num_heads,token_pos:Tens
     output_proj = F.linear(out, Wo)
 
     return output_proj
+
+
+
+def grouped_query_attention(
+    d_model: int,
+    num_heads: int,
+    num_kv_heads: int,
+    q_proj_weight: Tensor,
+    k_proj_weight: Tensor,
+    v_proj_weight: Tensor,
+    o_proj_weight: Tensor,
+    in_features: Tensor,
+    theta: float | None = None,
+    max_seq_len: int | None = None,
+    token_positions: Tensor | None = None,
+):
+    head_dim = d_model // num_heads
+    num_groups = num_heads // num_kv_heads #num of kv groups per head
+    seq_len = in_features.size(-2)
+    device = in_features.device
+    dtype = in_features.dtype
+
+    Q = F.linear(in_features, q_proj_weight)
+    K = F.linear(in_features, k_proj_weight)
+    V = F.linear(in_features, v_proj_weight)
+
+    # Q gets split per head
+    # G KV blocks per head
+    Q = Q.unflatten(-1,(num_heads,head_dim)).transpose(-2,-3)
+    K = K.unflatten(-1,(num_kv_heads, head_dim)).transpose(-2,-3)
+    V = V.unflatten(-1, (num_kv_heads, head_dim)).transpose(-2,-3)
+
+    if theta is not None:
+        if token_positions is None:
+            token_positions = torch.arange(seq_len, device=device)
+
+        Q = rope(head_dim,theta,seq_len,Q,token_positions)
+        K = rope(head_dim,theta,seq_len,K,token_positions)
+
+    # 4. Grouped-Query Attention: Duplicate K and V heads to match Q heads
+    # repeat_interleave duplicates the data along the 'head' dimension (dim=-3)
+    K = torch.repeat_interleave(K, repeats=num_groups, dim=-3)
+    V = torch.repeat_interleave(V, repeats=num_groups, dim=-3)
+
+    scores = torch.matmul(Q, K.transpose(-2,-1)) / math.sqrt(head_dim)
+    mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=device).tril()
+    scores = scores.masked_fill(~mask, float('-inf'))
+
+    attn = torch.softmax(scores, dim=-1)
+    out = torch.matmul(attn,V)
+
+    out = out.transpose(-2,-3).contiguous()
+    out = out.flatten(-2,-1)
+
+    return F.linear(out, o_proj_weight)
+    

@@ -444,7 +444,17 @@ def run_grouped_query_attention(
     (default: ``arange(seq)``). If *theta* is ``None``, use no positional
     encoding.
     """
-    raise NotImplementedError
+    return grouped_query_attention(d_model,
+                                   num_heads,
+                                   num_kv_heads,
+                                   q_proj_weight,
+                                   k_proj_weight,
+                                   v_proj_weight,
+                                   o_proj_weight,
+                                   in_features,
+                                   theta,
+                                   max_seq_len,
+                                   token_positions)
 
 
 # --- Task 8: Rotary Positional Embeddings -----------------------------------
