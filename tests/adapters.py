@@ -32,6 +32,7 @@ from therapml.custom_mlp import CustomMLP, MyCrossEntropyLoss
 from therapml.adamw import MyAdam
 from therapml.tokenizer import BasicTokenizer
 from therapml.attention import *
+from therapml.rope import rope
 
 # ============================================================================
 # Pre-phase: Tensor Operations (kept from original repo)
@@ -414,7 +415,7 @@ def run_multihead_self_attention(
                                o_proj_weight,
                                in_features,
                                d_model,
-                               num_heads)
+                               num_heads,torch.zeros_like(q_proj_weight),None)
 
 
 # --- Task 7: Grouped Query Attention ----------------------------------------
@@ -458,10 +459,10 @@ def run_rope(
     """Apply RoPE to *in_query_or_key*.
 
     Use the RoFormer pairing: dimensions ``(2i, 2i+1)`` form one 2-D pair, which
-    is rotated by angle ``pos · θ_i`` with ``θ_i = theta^(−2i / d_k)``.
+    is rotated by angle ``pos · θ_i`` with ``θ_i = theta^(-2i / d_k)``.
     *token_positions* broadcasts against the leading dimensions of the input.
     """
-    raise NotImplementedError
+    return rope(d_k,theta,max_seq_len,in_query_or_key,token_positions)
 
 
 def run_multihead_self_attention_with_rope(
@@ -478,7 +479,15 @@ def run_multihead_self_attention_with_rope(
 ) -> Float[Tensor, "... seq d_model"]:
     """Causal multi-head self-attention with RoPE applied to Q and K (per head,
     with ``d_k = d_model // num_heads``)."""
-    raise NotImplementedError
+    return multihead_attention(q_proj_weight,
+                               k_proj_weight,
+                               v_proj_weight,
+                               o_proj_weight,
+                               in_features,
+                               d_model,
+                               num_heads,
+                               token_positions,
+                               theta)
 
 
 # --- Task 9: KV-Cache --------------------------------------------------------
