@@ -2,6 +2,7 @@ import torch
 import math
 from torch import Tensor
 import torch.nn.functional as F
+from therapml.rope import rope
 
 def scaled_attention(Q,K,V,mask):
 
@@ -39,7 +40,7 @@ def causal_attention(Wq,Wk,Wv,in_features):
 
     return scaled_attention(Q,K,V,mask)
 
-def multihead_attention(Wq,Wk,Wv,Wo,in_features,d_model,num_heads):
+def multihead_attention(Wq,Wk,Wv,Wo,in_features,d_model,num_heads,token_pos:Tensor, theta=None):
 
     head_dim = d_model // num_heads
     seq_len = in_features.size(-2)
@@ -49,13 +50,22 @@ def multihead_attention(Wq,Wk,Wv,Wo,in_features,d_model,num_heads):
     K = F.linear(in_features, Wk)
     V = F.linear(in_features, Wv)
 
+    
+
     #change tensor orientation
     #1st arg = -1 means last dim is the target which is d_model
     #2nd arg = (num_heads, head_dim) is a tuple defining the new dimensions that will replace whatever is in -1
 
+
     Q = Q.unflatten(-1, (num_heads,head_dim)).transpose(-2,-3)
     K = K.unflatten(-1, (num_heads,head_dim)).transpose(-2,-3)
     V = V.unflatten(-1, (num_heads,head_dim)).transpose(-2,-3)
+
+    # rope is applied per head, so apply rope after splitting q,k and v
+    if theta is not None:
+        pos = token_pos.unsqueeze(-2) if token_pos.ndim < Q.ndim -1 else token_pos
+        Q = rope(head_dim, theta,0, Q, pos)
+        K = rope(head_dim, theta,0, K, pos)
 
     scores = torch.matmul(Q, K.transpose(-2,-1)) / math.sqrt(head_dim)
     mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=in_features.device).tril()
