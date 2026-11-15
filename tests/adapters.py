@@ -33,6 +33,7 @@ from therapml.adamw import MyAdam
 from therapml.tokenizer import BasicTokenizer
 from therapml.attention import *
 from therapml.rope import rope
+from therapml.kv_cache import *
 
 # ============================================================================
 # Pre-phase: Tensor Operations (kept from original repo)
@@ -516,7 +517,17 @@ def get_kv_cached_attention(
     """Return a *fresh* (empty-cache) causal GQA + RoPE attention object that
     keeps a KV-cache between calls. Same math as ``run_grouped_query_attention``
     with *theta* set."""
-    raise NotImplementedError
+    return get_cached_attention(
+        d_model,
+        num_heads,
+        num_kv_heads,
+        max_seq_len,
+        theta,
+        q_proj_weight,
+        k_proj_weight,
+        v_proj_weight,
+        o_proj_weight
+    )
 
 
 def run_kv_cached_attention(
@@ -531,14 +542,14 @@ def run_kv_cached_attention(
     this once with the whole sequence (prefill) or once per token (decoding)
     must give the same outputs as the uncached computation.
     """
-    raise NotImplementedError
+    return run_cached_attention(attn,in_features)
 
 
 def get_kv_cache(attn: Any) -> tuple[Tensor, Tensor]:
     """Return the cached ``(K, V)`` tensors, each of shape
     ``(batch, num_kv_heads, cached_seq_len, d_head)``. K is stored *after* RoPE
     and V never has RoPE applied."""
-    raise NotImplementedError
+    return get_caches(attn) # type: ignore
 
 
 # ============================================================================
