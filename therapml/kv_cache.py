@@ -76,7 +76,7 @@ def run_cached_attention(attn: CachedGQA, in_features: Tensor):
        batch_size = in_features.size(0)
 
        #Pre allocate maxmium seq len during initial memory allocation
-       attn.k_cache = torch.zeros(
+       attn.k_cache = torch.zeros( # type: ignore
            batch_size,attn.num_kv_heads, attn.max_seq_len, attn.head_dim,
            device=device, dtype=d_type
        )
