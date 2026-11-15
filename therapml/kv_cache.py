@@ -125,3 +125,249 @@ def get_caches(attn: CachedGQA):
         return (None, None)
 
     return (attn.k_cache[...,:attn.cache_len,:],attn.v_cache[...,:attn.cache_len,:]) # type: ignore
+
+
+def benchmark_generation(
+    seq_lens: list[int] = [128, 256, 512],
+    d_model: int = 512,
+    num_heads: int = 8,
+    num_kv_heads: int = 2,
+    batch_size: int = 4,
+    theta: float = 10000.0,
+    save_path: str = "kv_cache_benchmark.png",
+):
+    """
+    Benchmark token-by-token generation speed: with KV-cache vs. without KV-cache
+    for specified sequence lengths (e.g. 128, 256, 512).
+    Generates and saves a tokens/sec vs. sequence length comparison plot.
+    """
+    import time
+    import matplotlib.pyplot as plt
+    from therapml.attention import grouped_query_attention
+
+    d_head = d_model // num_heads
+    kv_dim = num_kv_heads * d_head
+    scale = d_model ** -0.5
+
+    # Deterministic projection weights
+    g = torch.Generator().manual_seed(42)
+    q_proj_weight = torch.randn(d_model, d_model, generator=g) * scale
+    k_proj_weight = torch.randn(kv_dim, d_model, generator=g) * scale
+    v_proj_weight = torch.randn(kv_dim, d_model, generator=g) * scale
+    o_proj_weight = torch.randn(d_model, d_model, generator=g) * scale
+
+    tok_per_sec_cached = []
+    tok_per_sec_uncached = []
+
+    print("\n" + "=" * 68)
+    print(f"{'Seq Len':<10} | {'No-Cache (tok/s)':<18} | {'With-Cache (tok/s)':<20} | {'Speedup':<10}")
+    print("-" * 68)
+
+    for seq_len in seq_lens:
+        x = torch.randn(batch_size, seq_len, d_model, generator=torch.Generator().manual_seed(123))
+
+        # --- 1. With KV-Cache ---
+        # Warmup (8 steps)
+        attn_warm = CachedGQA(d_model, num_heads, num_kv_heads, seq_len, theta,
+                              q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight)
+        for t in range(min(8, seq_len)):
+            run_cached_attention(attn_warm, x[:, t : t + 1])
+
+        # Timed run: generate seq_len tokens one-by-one
+        attn = CachedGQA(d_model, num_heads, num_kv_heads, seq_len, theta,
+                         q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight)
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            for t in range(seq_len):
+                run_cached_attention(attn, x[:, t : t + 1])
+        elapsed_cached = time.perf_counter() - t0
+        rate_cached = (batch_size * seq_len) / elapsed_cached
+        tok_per_sec_cached.append(rate_cached)
+
+        # --- 2. Without KV-Cache (recompute entire prefix at each step) ---
+        # Warmup (8 steps)
+        for t in range(1, min(8, seq_len) + 1):
+            grouped_query_attention(d_model, num_heads, num_kv_heads,
+                                   q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight,
+                                   x[:, :t], theta=theta, max_seq_len=seq_len)
+
+        # Timed run: recompute attention over the whole prefix at each step
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            for t in range(1, seq_len + 1):
+                grouped_query_attention(d_model, num_heads, num_kv_heads,
+                                       q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight,
+                                       x[:, :t], theta=theta, max_seq_len=seq_len)
+        elapsed_uncached = time.perf_counter() - t0
+        rate_uncached = (batch_size * seq_len) / elapsed_uncached
+        tok_per_sec_uncached.append(rate_uncached)
+
+        speedup = rate_cached / rate_uncached
+        print(f"{seq_len:<10} | {rate_uncached:<18.1f} | {rate_cached:<20.1f} | {speedup:<10.2f}x")
+
+    print("=" * 68)
+
+    # --- Plotting ---
+    plt.figure(figsize=(9, 5.5))
+    plt.plot(seq_lens, tok_per_sec_cached, marker='o', linewidth=2.5, color='#2ca02c', label='With KV-Cache')
+    plt.plot(seq_lens, tok_per_sec_uncached, marker='s', linewidth=2.5, color='#d62728', label='Without KV-Cache (Recompute)')
+
+    for i, s in enumerate(seq_lens):
+        speedup = tok_per_sec_cached[i] / tok_per_sec_uncached[i]
+        plt.annotate(
+            f"{speedup:.1f}x speedup\n({tok_per_sec_cached[i]:.0f} tok/s)",
+            xy=(s, tok_per_sec_cached[i]),
+            xytext=(0, 12),
+            textcoords="offset points",
+            ha='center',
+            fontsize=9,
+            fontweight='bold',
+            color='#2ca02c',
+        )
+        plt.annotate(
+            f"{tok_per_sec_uncached[i]:.0f} tok/s",
+            xy=(s, tok_per_sec_uncached[i]),
+            xytext=(0, -22),
+            textcoords="offset points",
+            ha='center',
+            fontsize=9,
+            color='#d62728',
+        )
+
+    plt.title("Generation Speed: KV-Cache vs. Full Prefix Recomputation", fontsize=13, fontweight='bold', pad=12)
+    plt.xlabel("Sequence Length", fontsize=11)
+    plt.ylabel("Generation Speed (Tokens / Second)", fontsize=11)
+    plt.xticks(seq_lens)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(fontsize=11)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300)
+    print(f"\nPlot saved to {save_path}")
+    plt.show()
+
+
+if __name__ == "__main__":
+    benchmark_generation()
+
+
+def benchmark_generation(
+    seq_lens: list[int] = [128, 256, 512],
+    d_model: int = 512,
+    num_heads: int = 8,
+    num_kv_heads: int = 2,
+    batch_size: int = 4,
+    theta: float = 10000.0,
+    save_path: str = "kv_cache_benchmark.png",
+):
+    """
+    Benchmark token-by-token generation speed: with KV-cache vs. without KV-cache
+    for specified sequence lengths (e.g. 128, 256, 512).
+    Generates and saves a tokens/sec vs. sequence length comparison plot.
+    """
+    import time
+    import matplotlib.pyplot as plt
+    from therapml.attention import grouped_query_attention
+
+    d_head = d_model // num_heads
+    kv_dim = num_kv_heads * d_head
+    scale = d_model ** -0.5
+
+    # Deterministic projection weights
+    g = torch.Generator().manual_seed(42)
+    q_proj_weight = torch.randn(d_model, d_model, generator=g) * scale
+    k_proj_weight = torch.randn(kv_dim, d_model, generator=g) * scale
+    v_proj_weight = torch.randn(kv_dim, d_model, generator=g) * scale
+    o_proj_weight = torch.randn(d_model, d_model, generator=g) * scale
+
+    tok_per_sec_cached = []
+    tok_per_sec_uncached = []
+
+    print("\n" + "=" * 68)
+    print(f"{'Seq Len':<10} | {'No-Cache (tok/s)':<18} | {'With-Cache (tok/s)':<20} | {'Speedup':<10}")
+    print("-" * 68)
+
+    for seq_len in seq_lens:
+        x = torch.randn(batch_size, seq_len, d_model, generator=torch.Generator().manual_seed(123))
+
+        # --- 1. With KV-Cache ---
+        # Warmup (8 steps)
+        attn_warm = CachedGQA(d_model, num_heads, num_kv_heads, seq_len, theta,
+                              q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight)
+        for t in range(min(8, seq_len)):
+            run_cached_attention(attn_warm, x[:, t : t + 1])
+
+        # Timed run: generate seq_len tokens one-by-one
+        attn = CachedGQA(d_model, num_heads, num_kv_heads, seq_len, theta,
+                         q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight)
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            for t in range(seq_len):
+                run_cached_attention(attn, x[:, t : t + 1])
+        elapsed_cached = time.perf_counter() - t0
+        rate_cached = (batch_size * seq_len) / elapsed_cached
+        tok_per_sec_cached.append(rate_cached)
+
+        # --- 2. Without KV-Cache (recompute entire prefix at each step) ---
+        # Warmup (8 steps)
+        for t in range(1, min(8, seq_len) + 1):
+            grouped_query_attention(d_model, num_heads, num_kv_heads,
+                                   q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight,
+                                   x[:, :t], theta=theta, max_seq_len=seq_len)
+
+        # Timed run: recompute attention over the whole prefix at each step
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            for t in range(1, seq_len + 1):
+                grouped_query_attention(d_model, num_heads, num_kv_heads,
+                                       q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight,
+                                       x[:, :t], theta=theta, max_seq_len=seq_len)
+        elapsed_uncached = time.perf_counter() - t0
+        rate_uncached = (batch_size * seq_len) / elapsed_uncached
+        tok_per_sec_uncached.append(rate_uncached)
+
+        speedup = rate_cached / rate_uncached
+        print(f"{seq_len:<10} | {rate_uncached:<18.1f} | {rate_cached:<20.1f} | {speedup:<10.2f}x")
+
+    print("=" * 68)
+
+    # --- Plotting ---
+    plt.figure(figsize=(9, 5.5))
+    plt.plot(seq_lens, tok_per_sec_cached, marker='o', linewidth=2.5, color='#2ca02c', label='With KV-Cache')
+    plt.plot(seq_lens, tok_per_sec_uncached, marker='s', linewidth=2.5, color='#d62728', label='Without KV-Cache (Recompute)')
+
+    for i, s in enumerate(seq_lens):
+        speedup = tok_per_sec_cached[i] / tok_per_sec_uncached[i]
+        plt.annotate(
+            f"{speedup:.1f}x speedup\n({tok_per_sec_cached[i]:.0f} tok/s)",
+            xy=(s, tok_per_sec_cached[i]),
+            xytext=(0, 12),
+            textcoords="offset points",
+            ha='center',
+            fontsize=9,
+            fontweight='bold',
+            color='#2ca02c',
+        )
+        plt.annotate(
+            f"{tok_per_sec_uncached[i]:.0f} tok/s",
+            xy=(s, tok_per_sec_uncached[i]),
+            xytext=(0, -22),
+            textcoords="offset points",
+            ha='center',
+            fontsize=9,
+            color='#d62728',
+        )
+
+    plt.title("Generation Speed: KV-Cache vs. Full Prefix Recomputation", fontsize=13, fontweight='bold', pad=12)
+    plt.xlabel("Sequence Length", fontsize=11)
+    plt.ylabel("Generation Speed (Tokens / Second)", fontsize=11)
+    plt.xticks(seq_lens)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(fontsize=11)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300)
+    print(f"\nPlot saved to {save_path}")
+    plt.show()
+
+
+if __name__ == "__main__":
+    benchmark_generation()
