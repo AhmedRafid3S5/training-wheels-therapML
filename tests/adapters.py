@@ -34,6 +34,7 @@ from therapml.tokenizer import BasicTokenizer
 from therapml.attention import *
 from therapml.rope import rope
 from therapml.kv_cache import *
+from therapml.transformer import TransformerBlock
 
 # ============================================================================
 # Pre-phase: Tensor Operations (kept from original repo)
@@ -587,7 +588,14 @@ def run_transformer_block(
 ) -> Float[Tensor, "batch seq d_model"]:
     """Run your ``TransformerBlock`` with the given *weights* loaded (see the
     layout above). Token positions are ``arange(seq)``."""
-    raise NotImplementedError
+    block = TransformerBlock(d_model,num_heads,
+                             num_kv_heads,d_ff,
+                             max_seq_len,theta)
+    block.load_state_dict(weights)
+    seq_len = in_features.size(-2)
+    token_positions = torch.arange(seq_len,device=in_features.device)
+    with torch.no_grad():
+        return block(in_features, token_positions)
 
 
 def run_transformer_lm(
