@@ -331,7 +331,7 @@ def run_train_bpe(corpus: str, vocab_size: int, special_tokens: list[str] | None
             if it appears in *corpus*.
     """
     bpe = BasicTokenizer()
-    bpe.train(corpus,vocab_size)
+    bpe.train(corpus, vocab_size, special_tokens=special_tokens)
     return bpe
 
 
