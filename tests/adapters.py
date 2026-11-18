@@ -35,6 +35,7 @@ from therapml.attention import *
 from therapml.rope import rope
 from therapml.kv_cache import *
 from therapml.transformer import TransformerBlock
+from therapml.miniLLaMa import MiniLlama, parameter_audit
 
 # ============================================================================
 # Pre-phase: Tensor Operations (kept from original repo)
@@ -621,7 +622,22 @@ def run_transformer_lm(
     the embedding), so your model needs a way to load an untied output head
     (e.g. a ``tie_weights`` flag).
     """
-    raise NotImplementedError
+    model = MiniLlama(
+        vocab_size,
+        context_length,
+        d_model,
+        num_layers,
+        num_heads,
+        num_kv_heads,
+        d_ff,
+        rope_theta=rope_theta,
+        tie_weights=False
+    )
+
+    model.load_weights(weights)
+    model.eval()
+    with torch.no_grad():
+        return model(in_indices)
 
 
 def get_mini_llama(
@@ -642,8 +658,19 @@ def get_mini_llama(
     (no biases), plus the token embedding (shared with the output head) and the
     final RMSNorm gain.
     """
-    raise NotImplementedError
+    model = MiniLlama(
+            vocab_size,
+            context_length,
+            d_model,
+            num_layers,
+            num_heads,
+            num_kv_heads,
+            d_ff,
+            rope_theta=rope_theta,
+            tie_weights=True
+        )
 
+    return model
 
 def run_parameter_audit(model: nn.Module) -> list[dict]:
     """Model Parameter Audit. Return one row per parameter tensor (the order of
@@ -656,7 +683,7 @@ def run_parameter_audit(model: nn.Module) -> list[dict]:
 
     Your utility may also print the table. The tests only check the return value.
     """
-    raise NotImplementedError
+    return parameter_audit(model, print_table=True)
 
 
 # --- Task 3: The Training Loop ----------------------------------------------
