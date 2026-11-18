@@ -80,6 +80,9 @@ class BasicTokenizer(Tokenizer):
         for i in range(num_merges):
             stats = get_stats(ids) # stats hold frequency of each pair of tokens
             # fetch the pair with highest frequency
+            # handle case where there are no pairs left gracefully
+            if not stats:
+                break
             pair = max(stats.keys(), key=lambda p:(stats[p], -p[0], -p[1]))
             idx = 256 + i
             ids = merge(ids,pair,idx)
