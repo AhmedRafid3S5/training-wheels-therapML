@@ -689,21 +689,22 @@ def run_parameter_audit(model: nn.Module) -> list[dict]:
 # --- Task 3: The Training Loop ----------------------------------------------
 
 def run_lr_schedule(step: int, total_steps: int, max_lr: float, min_lr: float, warmup_frac: float = 0.1) -> float:
-    """Linear warmup followed by cosine decay. With ``W = int(warmup_frac * total_steps)``:
-
-        step <  W              : max_lr · step / W
-        W ≤ step ≤ total_steps : min_lr + ½(1 + cos(π · (step − W) / (total_steps − W))) · (max_lr − min_lr)
-        step >  total_steps    : min_lr
-    """
-    raise NotImplementedError
+    """Linear warmup followed by cosine decay."""
+    warmup_steps = int(warmup_frac * total_steps)
+    if step < warmup_steps:
+        return max_lr * step / warmup_steps
+    elif step <= total_steps:
+        progress = (step - warmup_steps) / (total_steps - warmup_steps)
+        cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
+        return min_lr + cosine_decay * (max_lr - min_lr)
+    else:
+        return min_lr
 
 
 def run_gradient_clipping(parameters: Iterable[nn.Parameter], max_norm: float) -> float:
-    """Clip the gradients of *parameters* in place so their combined L2 norm is
-    at most *max_norm*. Return the total norm **before** clipping (you will log
-    it as the gradient-health metric). Parameters with ``grad is None`` are
-    skipped."""
-    raise NotImplementedError
+    """Clip gradients in place and return total norm before clipping."""
+    total_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm)
+    return float(total_norm.item() if isinstance(total_norm, torch.Tensor) else total_norm)
 
 
 # --- Task 5: Evaluation -----------------------------------------------------
@@ -713,7 +714,11 @@ def run_perplexity(
     targets: Int[Tensor, "..."],
 ) -> float:
     """Perplexity = exp(mean token-level cross-entropy, in nats)."""
-    raise NotImplementedError
+    vocab_size = logits.shape[-1]
+    flat_logits = logits.reshape(-1, vocab_size)
+    flat_targets = targets.reshape(-1)
+    loss = F.cross_entropy(flat_logits, flat_targets)
+    return math.exp(loss.item())
 
 
 def run_generate(
@@ -723,14 +728,25 @@ def run_generate(
     temperature: float,
     context_length: int,
 ) -> list[int]:
-    """Generate autoregressively from *model* and return only the
-    *max_new_tokens* new token ids.
+    """Generate autoregressively from model and return only new tokens."""
+    model.eval()
+    current_ids = list(prompt_ids)
+    new_tokens = []
 
-    * At each step, call ``model(ids)`` with ``ids`` of shape ``(1, seq)``. Keep
-      only the last ``context_length`` tokens when the running sequence gets
-      longer than that. Sample from the logits at the last position.
-    * ``temperature == 0`` means greedy (argmax) decoding. Otherwise sample from
-      ``softmax(logits / temperature)`` using the global torch RNG, so that
-      ``torch.manual_seed`` makes generation reproducible.
-    """
-    raise NotImplementedError
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            crop_ids = current_ids[-context_length:]
+            input_tensor = torch.tensor([crop_ids], dtype=torch.long)
+            logits = model(input_tensor)
+            next_logits = logits[0, -1, :]
+
+            if temperature == 0.0:
+                next_token = int(torch.argmax(next_logits).item())
+            else:
+                probs = F.softmax(next_logits / temperature, dim=-1)
+                next_token = int(torch.multinomial(probs, num_samples=1).item())
+
+            current_ids.append(next_token)
+            new_tokens.append(next_token)
+
+    return new_tokens
