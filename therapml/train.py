@@ -342,7 +342,8 @@ def train():
         num_kv_heads=NUM_KV_HEADS,
         d_ff=D_FF,
         rope_theta=ROPE_THETA,
-        tie_weights=True,  # Weight tying between embedding and output head
+        tie_weights=True, 
+        use_MHA_GELU=True # Weight tying between embedding and output head
     ).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -499,7 +500,7 @@ def train():
     print(f"Training completed in {elapsed_total:.2f} seconds ({TOTAL_STEPS / elapsed_total:.1f} steps/sec).")
 
     # Save trained checkpoint
-    save_path = PROJECT_ROOT / "mini_llama_trained.pt"
+    save_path = PROJECT_ROOT / "mini_llama_MHAGELU_trained.pt"
     torch.save(model.state_dict(), save_path)
     print(f"Model checkpoint saved to: {save_path}")
 

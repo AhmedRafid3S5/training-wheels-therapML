@@ -41,9 +41,9 @@ class MiniLlama(nn.Module):
             for _ in range(num_layers)
         ])
         if use_MHA_GELU:
-           self.ln_final = RMSNorm(d_model)
+           self.ln_final = LayerNorm(d_model)
         else:
-           self.ln_final =  LayerNorm(d_model)
+           self.ln_final = RMSNorm(d_model)
         # convert the n dimensional vector into a list of logits of the length vocab_size 
         # turn the [1, d_model] vector into [1, vocab_size]
         # via matrix multiplication with a [d_model, vocab_size] matrix for projection

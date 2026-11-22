@@ -36,13 +36,17 @@ class RMSNorm(nn.Module):
 
 class LayerNorm(nn.Module):
 
-    def __init__(self, d_model):
+    def __init__(self, d_model: int, eps: float = 1e-5):
+        super().__init__()
+        self.eps = eps
         self.gamma = nn.Parameter(torch.ones(d_model))
-        self.beta  = nn.Parameter(torch.ones(d_model))
+        self.beta  = nn.Parameter(torch.zeros(d_model))
 
-    def forward(self, x):
-
-        return myLayerNorm(x, self.gamma, self.beta)
+    def forward(self, x: Tensor) -> Tensor:
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, unbiased=False, keepdim=True)
+        x_norm = (x - mean) / torch.sqrt(var + self.eps)
+        return self.gamma * x_norm + self.beta
 
 
 class GroupedQueryAttention(nn.Module):
@@ -113,8 +117,8 @@ class MultiHeadAttention(nn.Module):
 
          #initializing projection matrix Wq,Wv,Wk and Output
          self.q_proj = nn.Linear(d_model, d_model, bias=False)
-         self.k_proj = nn.Linear(d_model, num_heads,  bias=False)
-         self.v_proj = nn.Linear(d_model, num_heads,  bias=False)
+         self.k_proj = nn.Linear(d_model, d_model, bias=False)
+         self.v_proj = nn.Linear(d_model, d_model, bias=False)
          self.output_proj = nn.Linear(d_model, d_model, bias=False)
 
      def forward(self, x, token_positions):
