@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from therapml.norm import myRMSnorm
+from therapml.norm import myRMSnorm, myLayerNorm
 from therapml.attention import *
 from therapml.activations import Activation
 from therapml.rope import rope
@@ -33,6 +33,16 @@ class RMSNorm(nn.Module):
     def forward(self, x):
 
         return myRMSnorm(x, self.weight)
+
+class LayerNorm(nn.Module):
+
+    def __init__(self, d_model):
+        self.gamma = nn.Parameter(torch.ones(d_model))
+        self.beta  = nn.Parameter(torch.ones(d_model))
+
+    def forward(self, x):
+
+        return myLayerNorm(x, self.gamma, self.beta)
 
 
 class GroupedQueryAttention(nn.Module):
@@ -85,6 +95,41 @@ class GroupedQueryAttention(nn.Module):
              token_positions,
          )
 
+class MultiHeadAttention(nn.Module):
+
+    
+     def __init__(self,d_model,num_heads,max_seq_len,theta):
+         super().__init__()
+         #assert divisibility of parameters
+         assert d_model % num_heads == 0
+         
+         self.num_heads    = num_heads
+         self.head_dim     = d_model // num_heads
+         self.theta        = theta
+         self.d_model      = d_model
+         self.max_seq_len  = max_seq_len
+
+         
+
+         #initializing projection matrix Wq,Wv,Wk and Output
+         self.q_proj = nn.Linear(d_model, d_model, bias=False)
+         self.k_proj = nn.Linear(d_model, num_heads,  bias=False)
+         self.v_proj = nn.Linear(d_model, num_heads,  bias=False)
+         self.output_proj = nn.Linear(d_model, d_model, bias=False)
+
+     def forward(self, x, token_positions):
+         return multihead_attention(
+             d_model=self.d_model,
+             num_heads=self.num_heads,
+             Wq=self.q_proj.weight,
+             Wk=self.k_proj.weight,
+             Wv=self.v_proj.weight,
+             Wo=self.output_proj.weight,
+             in_features=x,
+             theta=self.theta,
+             token_pos=token_positions,
+         )
+
 class SwiGLU(nn.Module):
     def __init__(self, d_model, d_ff):
         super().__init__()
@@ -96,6 +141,16 @@ class SwiGLU(nn.Module):
         # SwiGLU(x) = (SiLU(x @ W1^T) * (x @ W3^T)) @ W2^T
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
+class GELUFFN(nn.Module):
+    """Classic 2-layer Transformer FFN with GELU activation."""
+    def __init__(self, d_model: int, d_ff: int):
+        super().__init__()
+        self.w1 = nn.Linear(d_model, d_ff, bias=False)      # Up projection
+        self.w2 = nn.Linear(d_ff, d_model, bias=False)      # Down projection
+
+    def forward(self, x: Tensor) -> Tensor:
+        # x -> Linear -> GELU -> Linear
+        return self.w2(Activation.myGELU(self.w1(x)))
 
 class TransformerBlock(nn.Module):
 
@@ -112,15 +167,23 @@ class TransformerBlock(nn.Module):
                  num_kv_heads,
                  d_ff,
                  max_seq_len,
-                 theta) -> None:
+                 theta,
+                 MHA_GELU: bool = False) -> None:
         super().__init__()
 
         #define the sublayers here
         #NOTE: This only helps set up the size of each module
-        self.ln1 = RMSNorm(d_model)
-        self.attn = GroupedQueryAttention(d_model, num_heads, num_kv_heads, max_seq_len, theta)
-        self.ln2 = RMSNorm(d_model)
-        self.ffn = SwiGLU(d_model, d_ff)
+        if MHA_GELU == False:
+          self.ln1 = RMSNorm(d_model)
+          self.attn = GroupedQueryAttention(d_model, num_heads, num_kv_heads, max_seq_len, theta)
+          self.ln2 = RMSNorm(d_model)
+          self.ffn = SwiGLU(d_model, d_ff)
+        else:
+          self.ln1 = LayerNorm(d_model)
+          self.attn = MultiHeadAttention(d_model,num_heads,max_seq_len,theta)
+          self.ln2 = LayerNorm(d_model)
+          self.ffn = GELUFFN(d_model, d_ff)
+          
 
     def forward(self, x, token_positions):
         #Modules are wired up in sequence in the forward def

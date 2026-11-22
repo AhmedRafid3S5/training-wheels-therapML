@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from therapml.transformer import TransformerBlock, RMSNorm
+from therapml.transformer import TransformerBlock, RMSNorm, LayerNorm
 
 class MiniLlama(nn.Module):
 
@@ -15,7 +15,8 @@ class MiniLlama(nn.Module):
                  num_kv_heads:   int,
                  d_ff :          int,
                  rope_theta:     float,
-                 tie_weights:    bool = True):
+                 tie_weights:    bool = True,
+                 use_MHA_GELU:   bool = False):
 
         super().__init__()
 
@@ -34,12 +35,15 @@ class MiniLlama(nn.Module):
                 num_kv_heads=num_kv_heads,
                 d_ff=d_ff,
                 max_seq_len=context_length,
-                theta=rope_theta
+                theta=rope_theta,
+                MHA_GELU=use_MHA_GELU
             )
             for _ in range(num_layers)
         ])
-
-        self.ln_final = RMSNorm(d_model)
+        if use_MHA_GELU:
+           self.ln_final = RMSNorm(d_model)
+        else:
+           self.ln_final =  LayerNorm(d_model)
         # convert the n dimensional vector into a list of logits of the length vocab_size 
         # turn the [1, d_model] vector into [1, vocab_size]
         # via matrix multiplication with a [d_model, vocab_size] matrix for projection
