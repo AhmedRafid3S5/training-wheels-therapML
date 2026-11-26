@@ -1,5 +1,6 @@
 import re
 import unicodedata
+import torch
 
 def get_stats(ids, counts=None):
     counts = {} if counts is None else counts  # create a dict or use the one provided
@@ -159,8 +160,153 @@ class Tokenizer:
 
 
 class BasicTokenizer(Tokenizer):
-    def __init__(self):
+    def __init__(self, device=None):
         super().__init__()
+        self.device = torch.device(device) if device is not None else torch.device("cpu")
+        self._gpu_merge_cache = None
+
+    def to(self, device):
+        """Move tokenizer operations to the specified device ('cpu' or 'cuda')."""
+        self.device = torch.device(device)
+        self._gpu_merge_cache = None
+        return self
+
+    @staticmethod
+    def _merge_gpu(t: torch.Tensor, p0: int, p1: int, idx: int) -> torch.Tensor:
+        """Left-to-right non-overlapping merge of (p0, p1) -> idx on a 1D tensor."""
+        n = t.numel()
+        if n < 2:
+            return t
+
+        if p0 == p1:
+            is_p0 = t == p0
+            idx_arange = torch.arange(n, device=t.device)
+            reset_pos = torch.where(~is_p0, idx_arange, -1)
+            last_false = torch.cummax(reset_pos, dim=0).values
+            run_offset = idx_arange - last_false - 1
+            merge_start = is_p0[:-1] & ((run_offset[:-1] % 2) == 0) & is_p0[1:]
+        else:
+            merge_start = (t[:-1] == p0) & (t[1:] == p1)
+
+        if not merge_start.any():
+            return t
+
+        keep = torch.ones(n, dtype=torch.bool, device=t.device)
+        keep[1:] = ~merge_start
+        t_replaced = t.clone()
+        t_replaced[:-1][merge_start] = idx
+        return t_replaced[keep]
+
+    def _train_gpu(self, chunks: list[str], num_merges: int, vocab_size: int, verbose: bool):
+        """Train BPE merges on self.device using vectorized PyTorch operations."""
+        # Concatenate chunks with -1 sentinels so pairs never cross chunk boundaries
+        flat_ids = []
+        for idx_c, c in enumerate(chunks):
+            if idx_c > 0:
+                flat_ids.append(-1)
+            flat_ids.extend(c.encode("utf-8"))
+
+        t = torch.tensor(flat_ids, dtype=torch.int64, device=self.device)
+        merges = {}
+        vocab = {idx: bytes([idx]) for idx in range(256)}
+        stride = vocab_size
+
+        for i in range(num_merges):
+            if t.numel() < 2:
+                break
+
+            a = t[:-1]
+            b = t[1:]
+            valid = (a >= 0) & (b >= 0)
+            a_valid = a[valid]
+            b_valid = b[valid]
+            if a_valid.numel() == 0:
+                break
+
+            keys = a_valid * stride + b_valid
+            unique_keys, counts = torch.unique(keys, return_counts=True)
+            best_pos = int(torch.argmax(counts).item())
+            best_key = int(unique_keys[best_pos].item())
+            best_count = int(counts[best_pos].item())
+
+            p0 = best_key // stride
+            p1 = best_key % stride
+            pair = (p0, p1)
+            idx = 256 + i
+
+            t = self._merge_gpu(t, p0, p1, idx)
+            merges[pair] = idx
+            vocab[idx] = vocab[p0] + vocab[p1]
+            if verbose:
+                print(f"merge {i+1}/{num_merges}: {pair} -> {idx} ({vocab[idx]!r}) had {best_count} occurrences")
+
+        return merges, vocab
+
+    def _get_gpu_merge_lookup(self):
+        """Build or return cached GPU lookup structure for self.merges."""
+        cache_key = (len(self.merges), self.device)
+        if self._gpu_merge_cache is not None and self._gpu_merge_cache[0] == cache_key:
+            return self._gpu_merge_cache[1]
+
+        inf_rank = 2_000_000_000
+        max_id = max(
+            max((max(p0, p1) for p0, p1 in self.merges.keys()), default=255),
+            max(self.merges.values(), default=255),
+        )
+        table_size = max(256, max_id + 1)
+
+        if table_size <= 4096:
+            rank_table = torch.full((table_size, table_size), inf_rank, dtype=torch.int32, device=self.device)
+            p0s = torch.tensor([p[0] for p in self.merges.keys()], dtype=torch.int64, device=self.device)
+            p1s = torch.tensor([p[1] for p in self.merges.keys()], dtype=torch.int64, device=self.device)
+            idxs = torch.tensor(list(self.merges.values()), dtype=torch.int32, device=self.device)
+            rank_table[p0s, p1s] = idxs
+            lookup = ("table", rank_table, inf_rank)
+        else:
+            stride = table_size
+            keys = torch.tensor(
+                [p0 * stride + p1 for (p0, p1) in self.merges.keys()],
+                dtype=torch.int64,
+                device=self.device,
+            )
+            ranks = torch.tensor(list(self.merges.values()), dtype=torch.int32, device=self.device)
+            order = torch.argsort(keys)
+            lookup = ("sorted", keys[order], ranks[order], stride, inf_rank)
+
+        self._gpu_merge_cache = (cache_key, lookup)
+        return lookup
+
+    def _encode_chunk_gpu(self, text_chunk: str) -> list[int]:
+        """Encode a plain text segment on self.device using learned BPE merges."""
+        raw_bytes = text_chunk.encode("utf-8")
+        if len(raw_bytes) < 2 or not self.merges:
+            return list(raw_bytes)
+
+        t = torch.tensor(bytearray(raw_bytes), dtype=torch.uint8, device=self.device).to(torch.int64)
+        lookup = self._get_gpu_merge_lookup()
+
+        while t.numel() >= 2:
+            if lookup[0] == "table":
+                _, rank_table, inf_rank = lookup
+                ranks = rank_table[t[:-1], t[1:]]
+            else:
+                _, sorted_keys, sorted_ranks, stride, inf_rank = lookup
+                pair_keys = t[:-1] * stride + t[1:]
+                pos = torch.searchsorted(sorted_keys, pair_keys)
+                clamped = pos.clamp(max=sorted_keys.numel() - 1)
+                matched = sorted_keys[clamped] == pair_keys
+                ranks = torch.where(matched, sorted_ranks[clamped], inf_rank)
+
+            min_rank = int(ranks.min().item())
+            if min_rank >= inf_rank:
+                break
+
+            first_pos = int(torch.argmin(ranks).item())
+            p0 = int(t[first_pos].item())
+            p1 = int(t[first_pos + 1].item())
+            t = self._merge_gpu(t, p0, p1, min_rank)
+
+        return t.tolist()
 
     def train(self, text, vocab_size, verbose=False, special_tokens=None):
         assert vocab_size >= 256, "vocab_size must be at least 256 for base byte tokens"
@@ -180,31 +326,34 @@ class BasicTokenizer(Tokenizer):
         else:
             chunks = [text]
 
-        # Convert each chunk into initial UTF-8 byte token IDs
-        chunk_ids = [list(c.encode("utf-8")) for c in chunks]
+        if self.device.type == "cuda":
+            merges, vocab = self._train_gpu(chunks, num_merges, vocab_size, verbose)
+        else:
+            # Convert each chunk into initial UTF-8 byte token IDs
+            chunk_ids = [list(c.encode("utf-8")) for c in chunks]
 
-        merges = {}
-        vocab = {idx: bytes([idx]) for idx in range(256)}  # Raw bytes 0..255
+            merges = {}
+            vocab = {idx: bytes([idx]) for idx in range(256)}  # Raw bytes 0..255
 
-        # 2. Learn merges greedily up to num_merges
-        for i in range(num_merges):
-            stats = {}
-            for c_ids in chunk_ids:
-                get_stats(c_ids, stats)
+            # 2. Learn merges greedily up to num_merges
+            for i in range(num_merges):
+                stats = {}
+                for c_ids in chunk_ids:
+                    get_stats(c_ids, stats)
 
-            # If text is fully merged or no pairs remain, exit early gracefully
-            if not stats:
-                break
+                # If text is fully merged or no pairs remain, exit early gracefully
+                if not stats:
+                    break
 
-            # Pick pair with highest frequency (deterministic tie-breaking)
-            pair = max(stats.keys(), key=lambda p: (stats[p], -p[0], -p[1]))
-            idx = 256 + i
-            chunk_ids = [merge(c_ids, pair, idx) for c_ids in chunk_ids]
+                # Pick pair with highest frequency (deterministic tie-breaking)
+                pair = max(stats.keys(), key=lambda p: (stats[p], -p[0], -p[1]))
+                idx = 256 + i
+                chunk_ids = [merge(c_ids, pair, idx) for c_ids in chunk_ids]
 
-            merges[pair] = idx
-            vocab[idx] = vocab[pair[0]] + vocab[pair[1]]
-            if verbose:
-                print(f"merge {i+1}/{num_merges}: {pair} -> {idx} ({vocab[idx]!r}) had {stats[pair]} occurrences")
+                merges[pair] = idx
+                vocab[idx] = vocab[pair[0]] + vocab[pair[1]]
+                if verbose:
+                    print(f"merge {i+1}/{num_merges}: {pair} -> {idx} ({vocab[idx]!r}) had {stats[pair]} occurrences")
 
         # 3. Add special tokens with IDs placed strictly AFTER all merges
         # IDs: [vocab_size - num_specials .. vocab_size - 1]
@@ -223,9 +372,13 @@ class BasicTokenizer(Tokenizer):
 
         self.merges = merges
         self.vocab = vocab
+        self._gpu_merge_cache = None
 
     def _encode_chunk(self, text_chunk: str) -> list[int]:
         """Encodes a plain text segment (containing no special tokens) using learned BPE merges."""
+        if self.device.type == "cuda":
+            return self._encode_chunk_gpu(text_chunk)
+
         ids = list(text_chunk.encode("utf-8"))
         while len(ids) >= 2:
             stats = get_stats(ids)

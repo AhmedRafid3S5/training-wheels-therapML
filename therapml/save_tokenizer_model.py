@@ -7,8 +7,8 @@ train_text , _= load_corpus()
 
 #Instantiate and train the tokenizer model on the entire corpus
 tokenizer = BasicTokenizer()
-tokenizer.train(train_text,vocab_size=1000,verbose=True,special_tokens=SPECIAL_TOKENS)
+tokenizer.train(train_text,vocab_size=10000,verbose=True,special_tokens=SPECIAL_TOKENS)
 
 #Save the model 
-tokenizer.save("bpe_1000")
+tokenizer.save("bpe_10_000")
 print("SAVED")

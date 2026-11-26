@@ -8,7 +8,7 @@ from therapml.tokenizer import BasicTokenizer
 
 def load_chatbot(
     weights_path: str = "mini_llama_trained.pt",
-    tokenizer_path: str = "bpe_1000.model",
+    tokenizer_path: str = "bpe_10_000.model",
     device: str | None = None,
 ) -> tuple[MiniLlama, BasicTokenizer, str]:
     """Loads the trained MiniLlama weights and tokenizer onto the target device."""
@@ -33,12 +33,13 @@ def load_chatbot(
     else:
         # Fallback config matching your ~3.03M-parameter MiniLlama run
         config = {
-            "vocab_size": 1000,
-            "context_length": 128,
-            "d_model": 256,
-            "num_layers": 4,
+            "vocab_size": 10000,
+            "context_length": 256,
+            "d_model": 512,
+            "num_layers": 8,
             "num_heads": 8,
             "num_kv_heads": 2,
+            "use_MHA_GELU": True,
             "d_ff": 688,
             "rope_theta": 10_000.0,
             "tie_weights": True,
@@ -116,7 +117,7 @@ def stream_reply(
 
 
 def run_chat():
-    model, tokenizer, device = load_chatbot("mini_llama_trained.pt", "bpe_1000.model")
+    model, tokenizer, device = load_chatbot("mini_llama_MHAGELU_trained.pt", "bpe_10_000.model")
     print(f"Loaded MiniLlama on {device}. Type '/reset' to clear history or '/quit' to exit.\n")
 
     conversation_history = ""

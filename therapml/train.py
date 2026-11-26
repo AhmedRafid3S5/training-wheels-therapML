@@ -51,7 +51,7 @@ DATA_PATH = PROJECT_ROOT / "tests" / "fixtures" / "tinyshakespeare.txt"
 VOCAB_SIZE = 1000          # Vocabulary size (256 raw bytes + 740 merges + 4 specials)
 CONTEXT_LENGTH = 128       # Maximum sequence length (tokens per sample)
 D_MODEL = 256              # Embedding / hidden representation dimension
-NUM_LAYERS = 4             # Number of stacked Transformer blocks
+NUM_LAYERS = 8             # Number of stacked Transformer blocks
 NUM_HEADS = 8              # Number of query attention heads
 NUM_KV_HEADS = 2           # Number of key/value heads for Grouped Query Attention (4:1 ratio)
 D_FF = 688                 # Hidden dimension for the SwiGLU Feed-Forward Network
@@ -59,7 +59,7 @@ ROPE_THETA = 10000.0       # Base frequency for Rotary Positional Embeddings
 
 # Training Parameters
 BATCH_SIZE = 16            # Number of sequences per training step
-TOTAL_STEPS = 1000         # Total optimization steps
+TOTAL_STEPS = 2000         # Total optimization steps
 MAX_LR = 1e-3              # Peak learning rate reached at end of warmup
 MIN_LR = 1e-4              # Minimum learning rate at end of cosine decay
 WARMUP_FRAC = 0.1          # 10% of total steps for linear warmup
@@ -106,7 +106,7 @@ def get_learning_rate(step: int, total_steps: int, max_lr: float, min_lr: float,
 # 3. Dataset Preparation & Batching
 # =============================================================================
 
-def prepare_data(text_path: Path, vocab_size: int):
+def prepare_data(text_path: Path, vocab_size: int, device: str = "cpu"):
     """
     Loads text from file, trains a BasicTokenizer, and splits tokens into train/val sets.
     """
@@ -116,25 +116,25 @@ def prepare_data(text_path: Path, vocab_size: int):
 
     print(f"Loaded {len(raw_text):,} characters.")
 
-    # Train a BPE tokenizer with special tokens
-    print("Training BPE tokenizer...")
+    # Train a BPE tokenizer with special tokens on the target device
+    print(f"Training BPE tokenizer on {device}...")
     special_tokens = ["<PAD>", "<BOS>", "<EOS>", "<UNK>"]
-    tokenizer = BasicTokenizer()
+    tokenizer = BasicTokenizer(device=device)
 
     # Train on the first 50,000 characters to build the vocabulary
     train_slice = raw_text[:50_000]
     tokenizer.train(train_slice, vocab_size=vocab_size, special_tokens=special_tokens)
     print(f"Tokenizer trained with vocab size: {len(tokenizer.vocab)}")
 
-    # Encode the entire corpus into token IDs
-    print("Encoding corpus into token IDs...")
+    # Encode the entire corpus into token IDs on the target device
+    print(f"Encoding corpus into token IDs on {device}...")
     all_tokens = tokenizer.encode(raw_text)
     print(f"Total encoded tokens: {len(all_tokens):,}")
 
     # Split into Train (90%) and Validation (10%) sets
     split_index = int(0.9 * len(all_tokens))
-    train_tokens = torch.tensor(all_tokens[:split_index], dtype=torch.long)
-    val_tokens = torch.tensor(all_tokens[split_index:], dtype=torch.long)
+    train_tokens = torch.tensor(all_tokens[:split_index], dtype=torch.long, device=device)
+    val_tokens = torch.tensor(all_tokens[split_index:], dtype=torch.long, device=device)
 
     print(f"Train split: {len(train_tokens):,} tokens")
     print(f"Val split:   {len(val_tokens):,} tokens")
@@ -151,22 +151,12 @@ def get_batch(data: torch.Tensor, batch_size: int, context_length: int, device: 
     """
     # Pick random starting indices in the dataset
     max_start_idx = len(data) - context_length - 1
-    # By picking a random start index and blinding carving out exactly context_length tokens
-    # , we guarantee that every single sequence in the batch is perfectly rectangular.
-    random_starts = torch.randint(low=0, high=max_start_idx, size=(batch_size,))
+    random_starts = torch.randint(low=0, high=max_start_idx, size=(batch_size,), device=data.device)
+    offsets = torch.arange(context_length, device=data.device)
+    indices = random_starts.unsqueeze(1) + offsets.unsqueeze(0)
 
-    # Collect input sequences and corresponding target sequences (shifted by 1 token)
-    input_chunks = []
-    target_chunks = []
-    for start in random_starts:
-        x_chunk = data[start : start + context_length]
-        y_chunk = data[start + 1 : start + context_length + 1]
-        input_chunks.append(x_chunk)
-        target_chunks.append(y_chunk)
-
-    # Stack into 2D tensors of shape (batch_size, context_length)
-    x = torch.stack(input_chunks).to(device)
-    y = torch.stack(target_chunks).to(device)
+    x = data[indices].to(device)
+    y = data[indices + 1].to(device)
 
     return x, y
 
@@ -329,7 +319,7 @@ def train():
         print(f"Autocast Dtype: {amp_dtype}")
 
     # ── 2. Data Preparation ──────────────────────────────────────────────────
-    tokenizer, train_tokens, val_tokens = prepare_data(DATA_PATH, vocab_size=VOCAB_SIZE)
+    tokenizer, train_tokens, val_tokens = prepare_data(DATA_PATH, vocab_size=VOCAB_SIZE, device=device)
 
     # ── 3. Model Instantiation ───────────────────────────────────────────────
     print("\nInstantiating MiniLlama model...")
@@ -343,7 +333,7 @@ def train():
         d_ff=D_FF,
         rope_theta=ROPE_THETA,
         tie_weights=True, 
-        use_MHA_GELU=True # Weight tying between embedding and output head
+        use_MHA_GELU=False # Weight tying between embedding and output head
     ).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -500,7 +490,7 @@ def train():
     print(f"Training completed in {elapsed_total:.2f} seconds ({TOTAL_STEPS / elapsed_total:.1f} steps/sec).")
 
     # Save trained checkpoint
-    save_path = PROJECT_ROOT / "mini_llama_MHAGELU_trained.pt"
+    save_path = PROJECT_ROOT / "mini_llama_new_trained.pt"
     torch.save(model.state_dict(), save_path)
     print(f"Model checkpoint saved to: {save_path}")
 
